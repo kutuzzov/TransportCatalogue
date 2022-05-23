@@ -9,6 +9,7 @@
 #include <variant>
 
 namespace svg {
+    
     class Rgb {
     public:
         Rgb()
@@ -255,7 +256,7 @@ namespace svg {
         // Задаёт текстовое содержимое объекта (отображается внутри тега text)
         Text& SetData(std::string data);
 
-        // Прочие данные и методы, необходимые для реализации элемента
+        // Прочие данные и методы, необходимые для реализации элемента <text>
 
     private:
         void RenderObject(const RenderContext& context) const override;

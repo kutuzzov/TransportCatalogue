@@ -23,7 +23,7 @@ namespace json {
         using variant::variant;
         using Value = variant;
 
-        Node(Value& value) {
+        Node(Value value) {
             this->swap(value);
         }
 
@@ -111,7 +111,7 @@ namespace json {
         const Value& GetValue() const {
             return *this;
         }
-        
+        //Added no-const version
         Value& GetValue() {
             return *this;
         }

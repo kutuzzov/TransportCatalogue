@@ -41,7 +41,7 @@ namespace catalogue {
 	public:
 		void AddStop(const std::string_view name,
 			geo::Coordinates coordinates,
-			std::vector<std::pair<std::string, int>>& stops_distance);
+			std::unordered_map<std::string, int>& stops_distance);
 		void AddRoute(const std::string_view& name, const std::vector<std::string_view>& stops, bool is_circular);
 		BusPtr FindRoute(const std::string_view& route_name) const;
 		StopPtr FindStop(const std::string_view& stop_name) const;
@@ -49,6 +49,7 @@ namespace catalogue {
 		void SetDistanceBetweenStops(StopPtr from, StopPtr to, int distance);
 		size_t GetDistanceBetweenStops(StopPtr from, StopPtr to) const;
 		const std::map<std::string_view, BusPtr> GetAllRoutes() const;
+		const std::unordered_map<std::string_view, StopPtr>* GetAllStops() const;
 		const std::optional<RouteInfo> GetRouteInfo(const std::string_view& bus_name) const;
 
 	private:
