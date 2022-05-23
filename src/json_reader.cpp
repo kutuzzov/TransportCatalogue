@@ -4,16 +4,15 @@
 #include <vector>
 #include <string>
 #include <sstream>
-/*
- * Здесь можно разместить код наполнения транспортного справочника данными из JSON,
- * а также код обработки запросов к базе и формирование массива ответов в формате JSON
- */
+
 namespace json_reader {
 	using namespace std::literals;
-	JsonReader::JsonReader(std::istream& input, DataBasePtr catalogue, MapRenderPtr map_renderer)
+	JsonReader::JsonReader(std::istream& input, DataBasePtr catalogue, MapRenderPtr map_renderer,
+		RouterPtr transport_router)
 		: input_(json::Load(input))
 		, catalogue_ptr_(catalogue)
-		, map_renderer_ptr_(map_renderer) {
+		, map_renderer_ptr_(map_renderer)
+		, router_ptr_(transport_router) {
 		ProcessInput_();
 	}
 
@@ -22,7 +21,7 @@ namespace json_reader {
 	}
 
 	json::Document JsonReader::GetOutput() {
-		Handler::RequestHandler handler(*catalogue_ptr_, *map_renderer_ptr_);
+		Handler::RequestHandler handler(*catalogue_ptr_, *map_renderer_ptr_, *router_ptr_);
 		json::Array result;
 		for (const json::Node& request : input_.GetRoot().AsDict().at("stat_requests"s).AsArray()) {
 			std::string type = request.AsDict().at("type"s).AsString();
@@ -34,6 +33,9 @@ namespace json_reader {
 			}
 			if (type == "Map"s) {
 				result.push_back(std::move(GetMap_(handler, request)));
+			}
+			if (type == "Route") {
+				result.push_back(std::move(GetOptimalRoute_(handler, request)));
 			}
 		}
 		return json::Document(std::move(result));
@@ -62,6 +64,8 @@ namespace json_reader {
 		else {
 			return json::Builder{}
 				.StartDict()
+				.Key("request_id"s)
+				.Value(id)
 				.Key("error_message"s)
 				.Value("not found"s)
 				.EndDict()
@@ -111,15 +115,72 @@ namespace json_reader {
 		map_renderer_ptr_->SetRenderSettings(render_settings);
 		std::stringstream stream;
 		handler.RenderMap().Render(stream);
-		json::Node result = json::Builder{}
+		return json::Builder{}
 			.StartDict()
 			.Key("request_id"s)
 			.Value(id)
 			.Key("map"s)
 			.Value(stream.str())
 			.EndDict()
-			.Build();
-		return result.AsDict();
+			.Build()
+			.AsDict();
+	}
+
+	json::Dict JsonReader::GetOptimalRoute_(Handler::RequestHandler& handler, const json::Node& request) {
+		int id = request.AsDict().at("id"s).AsInt();
+		auto route_details = handler.GetOptimalRoute(request.AsDict().at("from"s).AsString(), request.AsDict().at("to"s).AsString());
+		if (!route_details.has_value()) {
+			return json::Builder{}
+				.StartDict()
+				.Key("request_id"s)
+				.Value(id)
+				.Key("error_message"s)
+				.Value("not found"s)
+				.EndDict()
+				.Build()
+				.AsDict();
+		}
+		json::Array items;
+		double total_time = 0.0;
+		for (auto* route_item : *route_details) {
+			items.push_back(json::Builder{}
+				.StartDict()
+				.Key("type"s)
+				.Value("Wait"s)
+				.Key("stop_name"s)
+				.Value(route_item->from->name)
+				.Key("time"s)
+				.Value(route_item->travel_duration.waiting_time / 60)
+				.EndDict()
+				.Build()
+				.AsDict());
+			total_time += route_item->travel_duration.waiting_time / 60;
+			items.push_back(json::Builder{}
+				.StartDict()
+				.Key("type"s)
+				.Value("Bus"s)
+				.Key("bus"s)
+				.Value(route_item->route->name)
+				.Key("span_count"s)
+				.Value(route_item->travel_duration.stops_number)
+				.Key("time"s)
+				.Value(route_item->travel_duration.travel_time / 60)
+				.EndDict()
+				.Build()
+				.AsDict());
+			total_time += route_item->travel_duration.travel_time / 60;
+		}
+		return json::Builder{}
+			.StartDict()
+			.Key("request_id"s)
+			.Value(id)
+			.Key("total_time"s)
+			.Value(total_time)
+			.Key("items"s)
+			.Value(items)
+			.EndDict()
+			.Build()
+			.AsDict();
 	}
 
 	renderer::RenderSettings JsonReader::ProcessRenderSettings(const json::Dict& settings) {
@@ -157,6 +218,7 @@ namespace json_reader {
 	void JsonReader::ProcessInput_() {
 		ProcessStops_();
 		ProcessRoutes_();
+		ProcessRouterSettings_();
 	}
 
 	void JsonReader::ProcessStops_() {
@@ -169,9 +231,9 @@ namespace json_reader {
 				auto longitude = request_map.at("longitude"s).AsDouble();
 				auto road_distance = request_map.at("road_distances"s).AsDict();
 				stop_names.push_back(name);
-				std::vector<std::pair<std::string, int>> near_stops;
+				std::unordered_map<std::string, int> near_stops;
 				for (const auto& [stop_name, distance] : road_distance) {
-					near_stops.push_back(std::make_pair(stop_name, distance.AsInt()));
+					near_stops[stop_name] = distance.AsInt();
 				}
 				catalogue_ptr_->AddStop(name, { latitude, longitude }, near_stops);
 			}
@@ -197,5 +259,12 @@ namespace json_reader {
 				catalogue_ptr_->AddRoute(name, stops, request_map.at("is_roundtrip"s).AsBool());
 			}
 		}
+	}
+
+	void JsonReader::ProcessRouterSettings_() {
+		json::Dict route_settings = input_.GetRoot().AsDict().at("routing_settings"s).AsDict();
+		router_ptr_->InitRouter({route_settings.at("bus_wait_time"s).AsInt(),
+			route_settings.at("bus_velocity"s).AsDouble() },
+			catalogue_ptr_);			
 	}
 }

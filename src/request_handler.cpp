@@ -1,18 +1,13 @@
 #include "request_handler.h"
 
-/*
-* Здесь можно было бы разместить код обработчика запросов к базе, содержащего логику, которую не
-* хотелось бы помещать ни в transport_catalogue, ни в json reader.
-*
-* Если вы затрудняетесь выбрать, что можно было бы поместить в этот файл,
-* можете оставить его пустым.
-*/
-
 namespace Handler {
 
-	RequestHandler::RequestHandler(const catalogue::TransportCatalogue& db, const renderer::MapRenderer& renderer)
+	RequestHandler::RequestHandler(const catalogue::TransportCatalogue& db, 
+		const renderer::MapRenderer& renderer,
+		const transport_router::TransportRouter& router)
 		: db_(db)
-		, renderer_(renderer) {
+		, renderer_(renderer) 
+		, router_(router) {
 	}
 
 	std::optional<catalogue::RouteInfo> RequestHandler::GetBusStat(const std::string_view& bus_name) const {
@@ -26,4 +21,9 @@ namespace Handler {
 	svg::Document RequestHandler::RenderMap() const {
 		return renderer_.GetSVG(db_.GetAllRoutes());
 	}
-}
+
+	std::optional<std::vector<const transport_router::TravelProps*>> RequestHandler::GetOptimalRoute(std::string_view from, std::string_view to) const {
+		return router_.FindRoute(from, to);
+	}
+    
+} // namespace Handler

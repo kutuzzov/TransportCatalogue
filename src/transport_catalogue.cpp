@@ -19,7 +19,7 @@ namespace catalogue {
 
 	void TransportCatalogue::AddStop(const std::string_view name,
 		geo::Coordinates coordinates,
-		std::vector<std::pair<std::string, int>>& stops_distance) {
+		std::unordered_map<std::string, int>& stops_distance) {
 		const auto& stop = stops_.emplace_back(Stop{ std::string(name), coordinates,  stops_distance });
 		stops_name_.insert({ stop.name, &stop });
 		buses_in_stop_[&stop];
@@ -73,6 +73,10 @@ namespace catalogue {
 			result[route.name] = &route;
 		}
 		return result;
+	}
+
+	const std::unordered_map<std::string_view, StopPtr>* TransportCatalogue::GetAllStops() const {
+		return &stops_name_;
 	}
 
 	const std::optional<RouteInfo> TransportCatalogue::GetRouteInfo(const std::string_view& bus_name) const {
